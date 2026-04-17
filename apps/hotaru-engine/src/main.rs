@@ -117,28 +117,39 @@ async fn get_current_price(client: &Client, symbol: &str) -> f64 {
     0.0
 }
 
-// 🟢 ฟังก์ชันใหม่: ดึง Top 10 เหรียญ (ฟรี ไม่เสีย Token)
+// 🟢 ฟังก์ชันใหม่: ดึง Top 10 เหรียญจาก Binance (เพื่อเป็นผู้นำตลาด) แต่เอามาเทรดที่ KuCoin
 async fn get_top_usdt_pairs(client: &Client, limit: usize) -> Vec<String> {
-    let url = "https://api.kucoin.com/api/v1/market/allTickers";
+    let url = "https://api.binance.com/api/v3/ticker/24hr";
     let mut symbols = Vec::new();
 
     if let Ok(res) = client.get(url).send().await {
         if let Ok(json) = res.json::<serde_json::Value>().await {
-            if let Some(ticker_array) = json["data"]["ticker"].as_array() {
+            if let Some(ticker_array) = json.as_array() {
                 let mut pairs: Vec<(String, f64)> = ticker_array.iter().filter_map(|t| {
                     let sym = t["symbol"].as_str()?;
-                    if !sym.ends_with("-USDT") { return None; }
-                    let vol = t["volValue"].as_str().unwrap_or("0").parse::<f64>().unwrap_or(0.0);
+                    if !sym.ends_with("USDT") { return None; }
+                    // ตัดพวกเหรียญแปลกๆ หรือ Stablecoin ออก
+                    if sym.contains("UP") || sym.contains("DOWN") || sym.contains("USDC") || sym.contains("BUSD") { return None; }
+                    
+                    let vol = t["quoteVolume"].as_str().unwrap_or("0").parse::<f64>().unwrap_or(0.0);
                     Some((sym.to_string(), vol))
                 }).collect();
 
-                // เรียงลำดับจาก Volume มากไปน้อย
+                // เรียงตาม Volume (มูลค่าซื้อขายรวม)
                 pairs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
                 
-                // ดึงมาแค่ตามจำนวน limit
-                symbols = pairs.into_iter().take(limit).map(|(s, _)| s).collect();
+                // แปลงชื่อจาก Binance (BTCUSDT) เป็น KuCoin (BTC-USDT)
+                symbols = pairs.into_iter().take(limit).map(|(s, _)| {
+                    let base = s.replace("USDT", "");
+                    format!("{}-USDT", base)
+                }).collect();
             }
         }
+    }
+    
+    if symbols.is_empty() {
+        println!("⚠️ [WARNING] ดึง Top 10 จาก Binance ไม่ได้ ใช้เหรียญมาตรฐานแทน...");
+        return vec!["BTC-USDT".to_string(), "ETH-USDT".to_string(), "SOL-USDT".to_string()];
     }
     symbols
 }
@@ -211,8 +222,9 @@ async fn main() {
             // 🛡️ SMART PRE-FILTER
             if entry_price == 0.0 {
                 let (rsi, recently_oversold) = get_analyzer_data(&client, symbol).await;
-                if rsi >= 35.0 && !recently_oversold {
-                    println!("💤 [SMART FILTER] {} RSI = {:.2} (ยังไม่ลงก้นเหว) -> ไม่กวน AI", symbol, rsi);
+                // 🦊 โฮตารุใจดีขึ้น: ถ้า RSI < 45 ก็ส่งให้ AI ดูได้เลย ไม่ต้องรอให้เน่าก้นเหวค่ะ
+                if rsi >= 45.0 && !recently_oversold {
+                    println!("💤 [SMART FILTER] {} RSI = {:.2} (ยังไม่ถึงจุดย่อ) -> ไม่กวน AI", symbol, rsi);
                     continue; 
                 }
             } else {

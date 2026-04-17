@@ -36,5 +36,16 @@ Return ONLY valid JSON: {{"action": "BUY/SELL/HOLD", "message": "reason"}}"""
 
     def _get_rules(self, is_holding):
         if is_holding:
-            return "HOLDING MODE: SELL if RSI > 70 or Vision is Bearish. HOLD to let winners run."
-        return "ENTRY MODE: BUY only if Vision Macro is Bullish and RSI is Oversold. Otherwise HOLD."
+            return """
+            [POSITION MANAGEMENT MODE]
+            - SELL: If PNL > 5% and Micro RSI > 75 (Take Profit), or if Macro Trend turns BEARISH.
+            - STOP LOSS: If PNL < -3%, evaluate if the support level is broken.
+            - HOLD: If Trend is still Bullish and RSI is not overextended. Let profits run!
+            """
+        return """
+            [MARKET SCANNING MODE]
+            - BUY: If Macro(1D) is BULLISH 🐂 AND (Micro RSI < 45 OR Setup is 'PERFECT BUY').
+            - BUY: If Vision signal says 'PERFECT BUY', ignore minor RSI fluctuations and ENTRY.
+            - AGGRESSION: At 0.00% PNL, don't be afraid. If the macro trend is up, every dip is an opportunity.
+            - HOLD: Only if both Macro and Micro trends are Bearish or unclear.
+            """
