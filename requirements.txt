@@ -1,0 +1,16 @@
+# 🦊 Hotaru's Python Requirements (Unified)
+
+# --- Web Framework ---
+fastapi>=0.100.0
+uvicorn>=0.20.0
+pydantic>=2.0.0
+
+# --- AI & Cloud ---
+cerebras-cloud-sdk>=1.0.0
+
+# --- Networking & API ---
+httpx>=0.24.0
+requests>=2.31.0
+
+# --- Utilities ---
+python-dotenv>=1.0.0
