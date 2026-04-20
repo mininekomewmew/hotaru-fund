@@ -20,7 +20,21 @@ async fn main() {
     // เปิดการเชื่อมต่อ Database
     let conn = Connection::open(DB_PATH).expect("❌ เปิดไฟล์ Database ไม่ได้!");
     
-    // 🛡️ ท่าไม้ตาย: สร้าง Unique Index ป้องกันข้อมูลซ้ำซ้อนเวลาดึงกราฟเหลื่อมทับกัน
+    // 🏗️ สร้างตาราง klines ถ้ายังไม่มี (สำคัญมาก!)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS klines (
+            symbol TEXT,
+            timestamp INTEGER,
+            open REAL,
+            close REAL,
+            high REAL,
+            low REAL,
+            volume REAL
+        )",
+        [],
+    ).expect("สร้างตารางไม่สำเร็จ!");
+
+    // 🛡️ ท่าไม้ตาย: สร้าง Unique Index ป้องกันข้อมูลซ้ำซ้อน
     conn.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_klines_sym_time ON klines(symbol, timestamp)",
         [],
