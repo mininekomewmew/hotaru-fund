@@ -9,11 +9,13 @@ from core.brain_engine import HotaruBrain
 app = FastAPI(title="🧠 Hotaru Brain - Unified AI Engine")
 
 # --- Configuration ---
-# 🦊 โฮตารุหา Path ของโปรเจกต์ให้แบบอัตโนมัติค่ะ (ถอยไป 2 ขั้นจาก apps/hotaru-brain/)
+# 🦊 โฮตารุหา Path ของโปรเจกต์ให้แบบอัตโนมัติค่ะ
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 LOG_FILE = os.path.join(DATA_DIR, "ai_reasoning.log")
-CEREBRAS_API_KEY = os.environ.get("CEREBRAS_API_KEY")
+
+# 🦊 รับ API Keys หลายตัว (เช่น key1,key2,key3)
+CEREBRAS_API_KEYS = os.environ.get("CEREBRAS_API_KEY", "").split(",")
 
 # --- Initialize Classes ---
 logger = BrainLogger(LOG_FILE)
@@ -21,7 +23,7 @@ services = ExternalServices(
     analyzer_url="http://127.0.0.1:3497/analyze",
     vision_url="http://127.0.0.1:8005/analyze"
 )
-brain = HotaruBrain(CEREBRAS_API_KEY)
+brain = HotaruBrain(CEREBRAS_API_KEYS)
 
 global_market_status = {"fng": "50 (Neutral)", "binance_market": {}}
 

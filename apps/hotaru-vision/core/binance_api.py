@@ -19,3 +19,14 @@ class BinanceClient:
             data = response.json()
             # ดึงเฉพาะราคาปิด (ตำแหน่งที่ 4)
             return [float(candle[4]) for candle in data]
+
+    async def fetch_kucoin_price(self, symbol: str) -> float:
+        """ดึงราคาปัจจุบันจาก KuCoin เพื่อหา Gap"""
+        url = f"https://api.kucoin.com/api/v1/market/orderbook/level1?symbol={symbol.upper()}"
+        async with httpx.AsyncClient() as client:
+            try:
+                res = await client.get(url, timeout=5)
+                data = res.json()
+                return float(data['data']['price'])
+            except Exception:
+                return 0.0
