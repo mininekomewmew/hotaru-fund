@@ -27,32 +27,45 @@ brain = HotaruBrain(CEREBRAS_API_KEYS)
 
 global_market_status = {"fng": "50 (Neutral)", "binance_market": {}}
 
+@app.get("/")
+async def root():
+    return {"status": "Hotaru Brain is Online!", "keys_active": len(brain.clients)}
+
 @app.post("/update_sentiment")
 async def update_sentiment(data: OracleData):
     global_market_status["fng"] = data.fng
     global_market_status["binance_market"] = data.binance_market
+    print(f"📊 [BRAIN] Sentiment Updated: F&G {data.fng}")
     return {"status": "updated"}
 
 @app.post("/analyze")
 async def analyze_market(data: MarketData):
-    is_holding = data.entry_price > 0
-    pnl_pct = ((data.price - data.entry_price) / data.entry_price * 100) if is_holding else 0
-    
-    # 1. Get Data from Sub-services
-    rsi_text = services.get_analyzer_data(data.symbol)
-    vision_text = services.get_vision_data(data.symbol)
-    combined_info = f"{rsi_text} {vision_text}"
+    try:
+        is_holding = data.entry_price > 0
+        pnl_pct = ((data.price - data.entry_price) / data.entry_price * 100) if is_holding else 0
 
-    # 2. Ask the Brain
-    decision = brain.decide(
-        data.symbol, data.price, pnl_pct, 
-        global_market_status["fng"], combined_info, is_holding
-    )
+        # 1. Get Data from Sub-services
+        rsi_text = services.get_analyzer_data(data.symbol)
+        vision_text = services.get_vision_data(data.symbol)
+        combined_info = f"{rsi_text} | {vision_text}"
 
-    # 3. Log the reasoning
-    logger.log_decision(data.symbol, data.price, pnl_pct, decision, combined_info)
-    
-    return decision
+        # 2. Ask the Brain
+        decision = brain.decide(
+            data.symbol, data.price, pnl_pct, 
+            global_market_status["fng"], combined_info, is_holding
+        )
+
+        # 3. Log the reasoning (บังคับบันทึกเสมอ!)
+        logger.log_decision(data.symbol, data.price, pnl_pct, decision, combined_info)
+        print(f"🧠 [BRAIN] Decision for {data.symbol}: {decision['action']}")
+
+        return decision
+    except Exception as e:
+        error_msg = {"action": "HOLD", "message": f"Critical Brain Error: {str(e)}"}
+        logger.log_decision(data.symbol, data.price, 0, error_msg, "ERROR")
+        return error_msg
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    import uvicorn
+    # 🦊 บังคับรันที่พอร์ต 8000 เสมอค่ะ
+    uvicorn.run(app, host="0.0.0.0", port=8000)

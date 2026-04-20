@@ -22,7 +22,8 @@ module.exports = {
     },
     {
       name: "hotaru-brain",
-      script: "main.py",
+      script: "uvicorn",
+      args: "main:app --host 0.0.0.0 --port 8000",
       cwd: "./apps/hotaru-brain", 
       interpreter: "python3",     
       restart_delay: 5000
