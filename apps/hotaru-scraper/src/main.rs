@@ -4,23 +4,56 @@ use serde_json::Value;
 use std::time::Duration;
 use tokio::time::sleep;
 
-// 📍 เปลี่ยน Path ให้ชี้ไปที่ไฟล์ DB ของเตง (ใช้ Absolute Path ดีที่สุดค่ะ)
-const DB_PATH: &str = "data/historical_data.db"; 
+// 📍 Path ของ Database
+const DB_PATH: &str = "data/historical_data.db";
 
-// 🪙 รายชื่อเหรียญที่เราต้องการดูดกราฟ
-const PAIRS: &[&str] = &[
-    "BTC-USDT", "ETH-USDT", "SOL-USDT", "XRP-USDT", 
-    "DOGE-USDT", "BNB-USDT", "SHIB-USDT", "PEPE-USDT"
-];
+// 🦊 ฟังก์ชันสำหรับดึงรายชื่อเหรียญที่ "วอลุ่มดี-วิ่งแรง" จาก KuCoin แบบ Real-time
+async fn scan_hot_symbols(client: &Client) -> Vec<String> {
+    println!("🔍 [SCANNER] กำลังกวาดหาเหรียญที่น่าสนใจในตลาด...");
+    let mut hot_symbols = Vec::new();
+    
+    let url = "https://api.kucoin.com/api/v1/market/allTickers";
+    if let Ok(res) = client.get(url).send().await {
+        if let Ok(json) = res.json::<Value>().await {
+            if let Some(tickers) = json["data"]["ticker"].as_array() {
+                let mut candidates: Vec<(String, f64, f64)> = tickers.iter()
+                    .filter_map(|t| {
+                        let symbol = t["symbol"].as_str()?.to_string();
+                        if symbol.ends_with("-USDT") && !symbol.contains("3L") && !symbol.contains("3S") {
+                            let vol = t["vol"].as_str()?.parse::<f64>().unwrap_or(0.0);
+                            let change = t["changeRate"].as_str()?.parse::<f64>().unwrap_or(0.0);
+                            if vol > 100000.0 { 
+                                return Some((symbol, vol, change));
+                            }
+                        }
+                        None
+                    })
+                    .collect();
+
+                candidates.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap());
+
+                for (sym, _, _) in candidates.iter().take(20) {
+                    hot_symbols.push(sym.clone());
+                }
+            }
+        }
+    }
+    
+    if hot_symbols.is_empty() {
+        hot_symbols = vec!["BTC-USDT".to_string(), "ETH-USDT".to_string(), "SOL-USDT".to_string()];
+    }
+    
+    println!("🎯 [SCANNER] เจอเหรียญน่าสนใจ 20 อันดับแรกแล้วค่ะ!");
+    hot_symbols
+}
 
 #[tokio::main]
 async fn main() {
-    println!("🚀 [SCRAPER START] ระบบดูดข้อมูลกราฟ (Rust) เริ่มทำงาน!");
+    println!("🚀 [SCRAPER START] ระบบ Smart Scanner (Rust) เริ่มทำงาน!");
     
-    // เปิดการเชื่อมต่อ Database
     let conn = Connection::open(DB_PATH).expect("❌ เปิดไฟล์ Database ไม่ได้!");
     
-    // 🏗️ สร้างตาราง klines ถ้ายังไม่มี (สำคัญมาก!)
+    // 🛡️ แยกการสร้างตารางและ Index ออกจากกันเพื่อความปลอดภัยค่ะ!
     conn.execute(
         "CREATE TABLE IF NOT EXISTS klines (
             symbol TEXT,
@@ -32,28 +65,32 @@ async fn main() {
             volume REAL
         )",
         [],
-    ).expect("สร้างตารางไม่สำเร็จ!");
+    ).expect("❌ สร้างตาราง klines ไม่สำเร็จ!");
 
-    // 🛡️ ท่าไม้ตาย: สร้าง Unique Index ป้องกันข้อมูลซ้ำซ้อน
     conn.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_klines_sym_time ON klines(symbol, timestamp)",
         [],
-    ).expect("สร้าง Index ไม่สำเร็จ!");
+    ).expect("❌ สร้าง Index ไม่สำเร็จ!");
 
-    let client = Client::new();
+    println!("✅ Database Initialized Successfully!");
+    
+    let client = Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .unwrap();
 
     loop {
-        println!("🔄 กำลังดึงกราฟ 15 นาทีล่าสุดจาก KuCoin...");
+        let pairs = scan_hot_symbols(&client).await;
         
-        for symbol in PAIRS {
+        println!("🔄 กำลังดึงกราฟของเหรียญที่เลือกมาให้เตงนะคะ...");
+        
+        for symbol in &pairs {
             let url = format!("https://api.kucoin.com/api/v1/market/candles?type=15min&symbol={}", symbol);
             
             if let Ok(res) = client.get(&url).send().await {
                 if let Ok(json) = res.json::<Value>().await {
                     if let Some(data_array) = json["data"].as_array() {
-                        
-                        // เอาแค่ 5 แท่งล่าสุดต่อรอบก็พอ เพื่อความรวดเร็วและประหยัดเน็ต
-                        for item in data_array.iter().take(5) {
+                        for item in data_array.iter().take(10) {
                             let ts = item[0].as_str().unwrap_or("0").parse::<i64>().unwrap_or(0);
                             let open = item[1].as_str().unwrap_or("0").parse::<f64>().unwrap_or(0.0);
                             let close = item[2].as_str().unwrap_or("0").parse::<f64>().unwrap_or(0.0);
@@ -61,7 +98,6 @@ async fn main() {
                             let low = item[4].as_str().unwrap_or("0").parse::<f64>().unwrap_or(0.0);
                             let vol = item[5].as_str().unwrap_or("0").parse::<f64>().unwrap_or(0.0);
 
-                            // บันทึกลง DB ถ้าเวลาซ้ำมันจะอัปเดตแท่งเดิมให้สมบูรณ์ขึ้น!
                             let _ = conn.execute(
                                 "INSERT OR REPLACE INTO klines (symbol, timestamp, open, close, high, low, volume) 
                                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -71,11 +107,10 @@ async fn main() {
                     }
                 }
             }
-            // 🛑 พักหายใจ 1 วินาที ป้องกัน KuCoin รำคาญแล้วแบน IP เราค่ะ!
-            sleep(Duration::from_secs(1)).await;
+            sleep(Duration::from_millis(150)).await;
         }
         
-        println!("✅ อัปเดตข้อมูลลง Database เรียบร้อย! พัก 1 นาทีก่อนดึงรอบต่อไป...");
-        sleep(Duration::from_secs(60)).await; // วนลูปดูดกราฟทุกๆ 1 นาที
+        println!("✅ อัปเดตข้อมูลเหรียญซิ่งลง Database เรียบร้อย! พัก 1 นาทีก่อนสแกนรอบใหม่...");
+        sleep(Duration::from_secs(60)).await;
     }
 }

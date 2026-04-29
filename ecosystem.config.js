@@ -22,10 +22,9 @@ module.exports = {
     },
     {
       name: "hotaru-brain",
-      script: "uvicorn",
-      args: "main:app --host 0.0.0.0 --port 8000",
+      script: "infisical",
+      args: "run -- python3 -m uvicorn main:app --host 0.0.0.0 --port 8000",
       cwd: "./apps/hotaru-brain", 
-      interpreter: "python3",     
       restart_delay: 5000
     },
     // 🌟 เอาแอปใหม่มาต่อท้ายตรงนี้เลยค่า!
@@ -35,6 +34,11 @@ module.exports = {
       args: "-m uvicorn main:app --host 127.0.0.1 --port 8005", // รันผ่าน uvicorn ที่พอร์ต 8005
       cwd: "./apps/hotaru-vision", 
       restart_delay: 5000
+    },
+    {
+      name: "hotaru-news-sentry",
+      script: "./apps/hotaru-news-sentry/target/release/hotaru-news-sentry",
+      restart_delay: 10000 
     }
 
   ]
